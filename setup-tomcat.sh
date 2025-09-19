@@ -7,7 +7,7 @@ set -e
 
 CERT_DIR="/etc/certs"
 TOMCAT_CONF="/etc/tomcat10/server.xml"
-KEY_PASS="changeit"   # Passwort für den PKCS12-Keystore
+KEY_PASS="changeit"   # Password for the PKCS12 keystore
 
 WEBROOT="/var/lib/tomcat10/webapps/ROOT"
 INDEX_FILE="$WEBROOT/index.html"
@@ -20,7 +20,7 @@ apt-get update -y
 echo "Upgrading installed packages..."
 apt-get upgrade -y
 
-# --- Install Tomcat10, OpenSSL and keytool (comes with default-jdk-headless) ---
+# --- Install Tomcat10, OpenSSL and JDK (for keytool) ---
 echo "Installing Tomcat10 and OpenSSL..."
 apt-get install -y tomcat10 tomcat10-admin openssl default-jdk-headless
 
@@ -32,6 +32,7 @@ systemctl start tomcat10
 # --- Create certificate directory ---
 echo "Creating certificate directory..."
 mkdir -p "$CERT_DIR"
+chown root:tomcat "$CERT_DIR"
 chmod 750 "$CERT_DIR"
 
 # --- Generate self-signed certificate ---
@@ -54,8 +55,8 @@ openssl pkcs12 -export \
   -name tomcat \
   -password pass:$KEY_PASS
 
-chmod 640 "$CERT_DIR/snakeoil.p12"
 chown root:tomcat "$CERT_DIR/snakeoil.p12"
+chmod 640 "$CERT_DIR/snakeoil.p12"
 
 echo "Certificates created:"
 echo "  Key     : $CERT_DIR/snakeoil.key.pem"
@@ -76,14 +77,10 @@ sed -i '/<\/Service>/i \
                redirectPort="8443" /> \n\
 \n\
     <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" \n\
-               maxThreads="150" SSLEnabled="true" scheme="https" secure="true"> \n\
-        <SSLHostConfig> \n\
-            <Certificate certificateKeystoreFile="'"$CERT_DIR/snakeoil.p12"'" \n\
-                         certificateKeystorePassword="'"$KEY_PASS"'" \n\
-                         certificateKeystoreType="PKCS12" \n\
-                         type="RSA" /> \n\
-        </SSLHostConfig> \n\
-    </Connector>' "$TOMCAT_CONF"
+               maxThreads="150" SSLEnabled="true" scheme="https" secure="true" \n\
+               keystoreFile="'"$CERT_DIR/snakeoil.p12"'" \n\
+               keystorePass="'"$KEY_PASS"'" \n\
+               keystoreType="PKCS12" />' "$TOMCAT_CONF"
 
 # --- Restart Tomcat to apply changes ---
 echo "Restarting Tomcat..."
