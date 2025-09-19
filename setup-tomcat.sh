@@ -8,6 +8,9 @@ set -e
 CERT_DIR="/etc/certs"
 TOMCAT_CONF="/etc/tomcat10/server.xml"
 
+WEBROOT="/var/lib/tomcat10/webapps/ROOT"
+INDEX_FILE="$WEBROOT/index.html"
+
 # --- Update package lists ---
 echo "Updating package lists..."
 apt-get update -y
@@ -72,3 +75,22 @@ echo "Restarting Tomcat..."
 systemctl restart tomcat10
 
 echo "System update complete, Tomcat10 installed, and HTTP/HTTPS configured with self-signed certificate."
+
+# --- Ensure Tomcat ROOT webapp directory exists ---
+mkdir -p "$WEBROOT"
+
+# --- Write index.html ---
+cat > "$INDEX_FILE" <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tomcat Default Page</title>
+</head>
+<body>
+    <h1 style="text-align:center; margin-top:20%;">Version #1.0 (Tomcat)</h1>
+</body>
+</html>
+EOF
+
+echo "index.html created at $INDEX_FILE"

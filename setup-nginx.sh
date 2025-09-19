@@ -7,6 +7,9 @@ set -e
 CERT_DIR="/etc/certs"
 NGINX_SITE="/etc/nginx/sites-available/default"
 
+WEBROOT="/var/www/html"
+INDEX_FILE="$WEBROOT/index.html"
+
 # --- Update package lists ---
 echo "Updating package lists..."
 apt-get update -y
@@ -87,3 +90,23 @@ nginx -t
 systemctl reload nginx
 
 echo "Generic HTTP (80) and HTTPS (443) site configuration applied successfully."
+
+
+# --- Ensure webroot exists ---
+mkdir -p "$WEBROOT"
+
+# --- Write index.html ---
+cat > "$INDEX_FILE" <<EOF
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Version 1.0</title>
+</head>
+<body>
+    <h1 style="text-align:center; margin-top:20%;">Version #1.0</h1>
+</body>
+</html>
+EOF
+
+echo "index.html created at $INDEX_FILE"
