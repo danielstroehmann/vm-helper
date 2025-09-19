@@ -1,11 +1,11 @@
 #!/bin/bash
 # Script: set-hostname.sh
 # Usage: sudo ./set-hostname.sh NEW_HOSTNAME
-# Description: Ändert den Hostnamen in Ubuntu (getestet auf 24.04 LTS)
+# Description: Change the hostname on Ubuntu (tested on 24.04 LTS)
 
 set -e
 
-# --- Parameter prüfen ---
+# --- Check parameters ---
 if [ "$#" -ne 1 ]; then
     echo "Usage: $0 NEW_HOSTNAME"
     exit 1
@@ -14,23 +14,23 @@ fi
 NEW_HOSTNAME="$1"
 CURRENT_HOSTNAME=$(hostname)
 
-# --- Hostname sofort setzen ---
+# --- Set hostname immediately ---
 hostnamectl set-hostname "$NEW_HOSTNAME"
 
-# --- /etc/hostname aktualisieren ---
+# --- Update /etc/hostname ---
 echo "$NEW_HOSTNAME" > /etc/hostname
 
-# --- /etc/hosts anpassen ---
-# Falls alte Hostname-Einträge existieren, diese ersetzen
+# --- Update /etc/hosts ---
+# Replace old hostname if present
 if grep -q "$CURRENT_HOSTNAME" /etc/hosts; then
     sed -i "s/\b$CURRENT_HOSTNAME\b/$NEW_HOSTNAME/g" /etc/hosts
 fi
 
-# Sicherstellen, dass 127.0.1.1 eine Zeile mit neuem Hostnamen hat
+# Ensure 127.0.1.1 entry exists with new hostname
 if ! grep -q "127.0.1.1\s\+$NEW_HOSTNAME" /etc/hosts; then
-    # Entferne evtl. alte 127.0.1.1-Zeilen
+    # Remove any old 127.0.1.1 lines
     sed -i '/^127\.0\.1\.1/d' /etc/hosts
     echo -e "127.0.1.1\t$NEW_HOSTNAME" >> /etc/hosts
 fi
 
-echo "Hostname erfolgreich geändert von '$CURRENT_HOSTNAME' auf '$NEW_HOSTNAME'."
+echo "Hostname changed successfully from '$CURRENT_HOSTNAME' to '$NEW_HOSTNAME'."

@@ -1,0 +1,74 @@
+#!/bin/bash
+# Script: setup-tomcat10.sh
+# Usage: sudo ./setup-tomcat10.sh
+# Description: Update system, install Tomcat10, create TLS certs, and configure HTTP/HTTPS
+
+set -e
+
+CERT_DIR="/etc/certs"
+TOMCAT_CONF="/etc/tomcat10/server.xml"
+
+# --- Update package lists ---
+echo "Updating package lists..."
+apt-get update -y
+
+# --- Upgrade installed packages ---
+echo "Upgrading installed packages..."
+apt-get upgrade -y
+
+# --- Install Tomcat10 and OpenSSL ---
+echo "Installing Tomcat10 and OpenSSL..."
+apt-get install -y tomcat10 tomcat10-admin openssl
+
+# --- Enable and start Tomcat10 service ---
+echo "Enabling and starting Tomcat10..."
+systemctl enable tomcat10
+systemctl start tomcat10
+
+# --- Create certificate directory ---
+echo "Creating certificate directory..."
+mkdir -p "$CERT_DIR"
+chmod 700 "$CERT_DIR"
+
+# --- Generate self-signed certificate ---
+echo "Generating self-signed certificate..."
+openssl req -x509 -nodes -newkey rsa:4096 \
+  -keyout "$CERT_DIR/snakeoil.key.pem" \
+  -out "$CERT_DIR/snakeoil.crt.pem" \
+  -days 10950 \
+  -subj "/CN=snakeoil"
+
+chmod 600 "$CERT_DIR/snakeoil.key.pem"
+chmod 644 "$CERT_DIR/snakeoil.crt.pem"
+
+echo "Certificates created:"
+echo "  Key : $CERT_DIR/snakeoil.key.pem"
+echo "  Cert: $CERT_DIR/snakeoil.crt.pem"
+
+# --- Configure Tomcat server.xml ---
+echo "Configuring Tomcat connectors..."
+
+# Remove existing <Connector> entries for 8080 and 8443 to avoid duplicates
+sed -i '/<Connector port="8080"/,/>/d' "$TOMCAT_CONF"
+sed -i '/<Connector port="8443"/,/>/d' "$TOMCAT_CONF"
+
+# Insert new connectors before </Service>
+sed -i '/<\/Service>/i \
+    <Connector port="8080" protocol="HTTP/1.1" \n\
+               connectionTimeout="20000" \n\
+               redirectPort="8443" /> \n\
+\n\
+    <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" \n\
+               maxThreads="150" SSLEnabled="true" > \n\
+        <SSLHostConfig> \n\
+            <Certificate certificateFile="'"$CERT_DIR/snakeoil.crt.pem"'" \n\
+                         certificateKeyFile="'"$CERT_DIR/snakeoil.key.pem"'" \n\
+                         type="RSA" /> \n\
+        </SSLHostConfig> \n\
+    </Connector>' "$TOMCAT_CONF"
+
+# --- Restart Tomcat to apply changes ---
+echo "Restarting Tomcat..."
+systemctl restart tomcat10
+
+echo "System update complete, Tomcat10 installed, and HTTP/HTTPS configured with self-signed certificate."
