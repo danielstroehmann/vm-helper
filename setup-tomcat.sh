@@ -1,12 +1,13 @@
 #!/bin/bash
 # Script: setup-tomcat10.sh
 # Usage: sudo ./setup-tomcat10.sh
-# Description: Update system, install Tomcat10, create TLS certs, and configure HTTP/HTTPS
+# Description: Update system, install Tomcat10, create TLS certs (PKCS12), and configure HTTP/HTTPS
 
 set -e
 
 CERT_DIR="/etc/certs"
 TOMCAT_CONF="/etc/tomcat10/server.xml"
+KEY_PASS="changeit"   # Passwort für den PKCS12-Keystore
 
 WEBROOT="/var/lib/tomcat10/webapps/ROOT"
 INDEX_FILE="$WEBROOT/index.html"
@@ -19,9 +20,9 @@ apt-get update -y
 echo "Upgrading installed packages..."
 apt-get upgrade -y
 
-# --- Install Tomcat10 and OpenSSL ---
+# --- Install Tomcat10, OpenSSL and keytool (comes with default-jdk-headless) ---
 echo "Installing Tomcat10 and OpenSSL..."
-apt-get install -y tomcat10 tomcat10-admin openssl
+apt-get install -y tomcat10 tomcat10-admin openssl default-jdk-headless
 
 # --- Enable and start Tomcat10 service ---
 echo "Enabling and starting Tomcat10..."
@@ -31,7 +32,7 @@ systemctl start tomcat10
 # --- Create certificate directory ---
 echo "Creating certificate directory..."
 mkdir -p "$CERT_DIR"
-chmod 700 "$CERT_DIR"
+chmod 750 "$CERT_DIR"
 
 # --- Generate self-signed certificate ---
 echo "Generating self-signed certificate..."
@@ -41,12 +42,25 @@ openssl req -x509 -nodes -newkey rsa:4096 \
   -days 10950 \
   -subj "/CN=snakeoil"
 
-chmod 600 "$CERT_DIR/snakeoil.key.pem"
+chmod 640 "$CERT_DIR/snakeoil.key.pem"
 chmod 644 "$CERT_DIR/snakeoil.crt.pem"
 
+# --- Create PKCS12 keystore for Tomcat ---
+echo "Creating PKCS12 keystore for Tomcat..."
+openssl pkcs12 -export \
+  -in "$CERT_DIR/snakeoil.crt.pem" \
+  -inkey "$CERT_DIR/snakeoil.key.pem" \
+  -out "$CERT_DIR/snakeoil.p12" \
+  -name tomcat \
+  -password pass:$KEY_PASS
+
+chmod 640 "$CERT_DIR/snakeoil.p12"
+chown root:tomcat "$CERT_DIR/snakeoil.p12"
+
 echo "Certificates created:"
-echo "  Key : $CERT_DIR/snakeoil.key.pem"
-echo "  Cert: $CERT_DIR/snakeoil.crt.pem"
+echo "  Key     : $CERT_DIR/snakeoil.key.pem"
+echo "  Cert    : $CERT_DIR/snakeoil.crt.pem"
+echo "  Keystore: $CERT_DIR/snakeoil.p12"
 
 # --- Configure Tomcat server.xml ---
 echo "Configuring Tomcat connectors..."
@@ -62,10 +76,11 @@ sed -i '/<\/Service>/i \
                redirectPort="8443" /> \n\
 \n\
     <Connector port="8443" protocol="org.apache.coyote.http11.Http11NioProtocol" \n\
-               maxThreads="150" SSLEnabled="true" > \n\
+               maxThreads="150" SSLEnabled="true" scheme="https" secure="true"> \n\
         <SSLHostConfig> \n\
-            <Certificate certificateFile="'"$CERT_DIR/snakeoil.crt.pem"'" \n\
-                         certificateKeyFile="'"$CERT_DIR/snakeoil.key.pem"'" \n\
+            <Certificate certificateKeystoreFile="'"$CERT_DIR/snakeoil.p12"'" \n\
+                         certificateKeystorePassword="'"$KEY_PASS"'" \n\
+                         certificateKeystoreType="PKCS12" \n\
                          type="RSA" /> \n\
         </SSLHostConfig> \n\
     </Connector>' "$TOMCAT_CONF"
@@ -74,7 +89,7 @@ sed -i '/<\/Service>/i \
 echo "Restarting Tomcat..."
 systemctl restart tomcat10
 
-echo "System update complete, Tomcat10 installed, and HTTP/HTTPS configured with self-signed certificate."
+echo "System update complete, Tomcat10 installed, and HTTP/HTTPS configured with PKCS12 certificate."
 
 # --- Ensure Tomcat ROOT webapp directory exists ---
 mkdir -p "$WEBROOT"
